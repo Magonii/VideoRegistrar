@@ -1,0 +1,58 @@
+# Запуск:   docker compose up -d --build
+# Демо:     DEMO=1 docker compose up -d --build        (камеры не нужны)
+# Worker:   docker compose --profile vision up -d worker   (нужен GPU NVIDIA и настроенный CAMERA_ID)
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: mall
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-mall}
+      POSTGRES_DB: mall
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mall"]
+      interval: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+psycopg://mall:${DB_PASSWORD:-mall}@db:5432/mall
+      MALL_TZ: ${MALL_TZ:-Asia/Almaty}
+      DEMO: ${DEMO:-0}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+    volumes:
+      - appdata:/data
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  worker:
+    profiles: ["vision"]
+    build: ./worker
+    command: ["--camera-id", "${CAMERA_ID:-1}", "--backend", "http://backend:8000", "--device", "0"]
+    depends_on:
+      - backend
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+volumes:
+  dbdata:
+  appdata:

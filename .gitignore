@@ -1,0 +1,11 @@
+.venv/
+lab/*.pt
+__pycache__/
+*.pyc
+node_modules/
+dist/
+backend/data/
+/data/
+*.log
+*.pt
+.env
